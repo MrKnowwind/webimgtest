@@ -1,97 +1,83 @@
-# Cover Lab · 游戏封面测试台
+# Cover Lab
 
-一个无运行依赖的静态测试网站。在类似游戏平台的大厅网格中临时查看图片，检查尺寸、清晰度、裁切和加载耗时。所有资源随项目一起发布，不依赖第三方字体或图片。
+线上：[封面预览](https://mrknowwind.github.io/webimgtest/) · [图片处理](https://mrknowwind.github.io/webimgtest/process/)
 
-## 本地使用
+封面页支持图片和整个文件夹拖入、子目录递归、尺寸与 DPR 检查。默认 1 张示例，导入后替换。已移除耗时估算，仅保留实际读取 / URL 测量。
 
-安装 Node.js 22 或更高版本，在此目录运行：
+图片处理使用 React + Vite。默认在浏览器 Worker 中执行真实 ImageMagick WASM + Oxipng WASM 转换，**使用者无需服务器、账号或密钥，图片不上传**。Node.js + Sharp + Oxipng 作为真实可选后端保留。Sharp 原生模块不能直接运行在 GitHub Pages 上，不能把它伪装成浏览器功能。
+
+## 使用
+
+支持 PNG、JPG、WebP、AVIF 批量转换、图片和文件夹拖放、文件夹选择、无损 / 有损、质量参数、等比例缩小、原图与结果预览、体积对比、单图与 ZIP 下载。
+
+默认：**WebP / 无损 / 质量 85 / 原始分辨率**。无损模式保留质量偏好，但不使用质量参数量化像素。处理页每张最多 25 MB / 2400 万像素，每批最多 50 张，输入与结果各 200 MB；封面页独立支持 500 张。
+
+所有编码器、WASM、脚本和样式随仓库部署，不依赖第三方 CDN。WASM 在首次开始处理时加载。原始体积约 15.4 MB，传输压缩后约 5.5 MB。单线程版本不依赖 SharedArrayBuffer 或额外 HTTP 安全头。
+
+## 无损、元数据和原文件
+
+- 网页将普通 8-bit 输入解码为 RGBA8，输出后重新解码，比较每个通道，包括透明像素下面的 RGB。只有尺寸、所有像素和 ICC 检查通过，才返回“像素一致已验证”；失败会拒绝结果，不以肉眼相似冒充无损。
+- 报告包含引擎、验证范围、像素深度、基准 / 输出像素 SHA-256、源文件 / 输出文件 SHA-256、尺寸、体积和警告。ZIP 附 `verification.json`。不同解码器对 JPEG 的舍入可能不同，不声称跨解码器哈希必然一致。
+- 缩放只等比例缩小，不放大。开启后以缩放后的像素为校验基准，明确标记原始像素已改变，不把整项操作说成对原图无损。
+- JPEG 跨格式输出或缩放不提供像素级无损；透明转 JPEG 默认拒绝，需明确允许背景铺底。AVIF 编码即使设置无损，也可能因 RGB / YUV 转换改变像素，校验不通过时拒绝输出。
+- 网页引擎对高位深输入、AVIF 输入转换及 CMYK 转换不能承诺逐像素无损，会明确拒绝。动画 / 多帧不会静默取第一帧。可保留原文件、明确使用有损模式，或使用可选 Sharp 服务。
+- 同格式 JPG / WebP / AVIF 默认原样直出，不重复编码，报告为“原样保留”，不代表源文件本身采用无损编码。需要同格式有损压缩时，必须勾选“允许同格式有损重编码”。每次从最初上传的 File 开始，不使用上次输出再次编码。
+- 优先保留透明、ICC、EXIF、XMP 等。ICC 无法原样保留时不能声明无损；其他元数据不能保留或被容器重写时显示警告。PNG 优化不使用会修改透明 RGB 的 `--alpha` 或清除元数据的 `--strip`。
+- 不覆盖原文件。输出使用 `_processed` 后缀，ZIP 重名自动编号。文件变大时明确显示增幅和提醒，由使用者决定是否下载。
+
+## 本地开发
+
+需要 Node.js 22.12+。原生 Oxipng 由 `oxipng-bin` 提供，也可用 `OXIPNG_PATH` 指定自己的可执行文件。
 
 ```powershell
 npm ci
 npm run dev
 ```
 
-浏览器打开 <http://127.0.0.1:4173>。按 Ctrl+C 停止。
+前端：<http://127.0.0.1:4173/>；处理页 `/process/`。可选 API：<http://127.0.0.1:3001/api/health>。本地前端将 `/api` 代理到此服务，默认仍在浏览器处理。
 
 ```powershell
-npm test          # 测试传输估算与高 DPR / 裁切像素判断
-npm run build    # 输出 dist/
-npm run preview  # 用 HTTP 查看构建产物，仍使用 4173 端口
+npm test
+npm run build
+npm run preview
 ```
 
-`dev` 和 `preview` 不要同时占用同一个端口。可通过 `$env:PORT=4174` 指定其他端口。不要直接双击 HTML：浏览器的 ES 模块需要 HTTP 服务。
+`preview` 仅提供构建后的静态网页，适合验证无服务器路径；不要与 `dev` 同时占用 4173。浏览器编码在 Worker 内运行，停止处理会终止 Worker。
 
-## 上传到 GitHub 后自动部署
+## GitHub 自动部署
 
-已配置 [GitHub Actions 工作流](.github/workflows/deploy.yml)，不需要个人 Token、额外密钥或付费后端。
+`.github/workflows/deploy.yml` 在默认分支 push 后执行：安装依赖 → 真实编码 / API 测试 → Vite 构建 → GitHub Pages 部署。PR 只验证，不部署。
 
-1. 在 GitHub 建立仓库。免费个人账号建议使用公开仓库；私有仓库的 Pages 支持取决于账号方案。
-2. 将这个目录的**全部源码（包含 `.github` 文件夹）**提交到仓库默认分支。不要只上传 `dist/`。可以用 GitHub Desktop，也可以执行下面的命令，把地址换成自己的空仓库地址：
+仓库 **Settings → Pages → Source** 选择 **GitHub Actions**。默认浏览器处理路径不需要服务器、Secrets 或后端地址。资源使用相对路径，适配 `/webimgtest/` 子路径。
 
-   ```powershell
-   git init -b main
-   git add .
-   git commit -m "Add Cover Lab image test bench"
-   git remote add origin https://github.com/你的用户名/你的仓库名.git
-   git push -u origin main
-   ```
+## 可选 Node / Docker 服务
 
-3. 仓库 **Settings → Pages → Build and deployment → Source → GitHub Actions**。这是首次需要进行的一次设置。
-4. 如果第一次提交发生在开启 Pages 之前，进入 **Actions → Test and deploy Cover Lab → Run workflow**，选择默认分支再运行一次。失败后也可以点击 Re-run all jobs。
-5. 部署成功后，在仓库 **Settings → Pages** 或 Actions 中的 `github-pages` 环境查看访问地址，通常为 `https://你的用户名.github.io/你的仓库名/`。
+只在需要 Sharp 时使用，GitHub Pages 无需此步骤。
 
-之后每次 push 到**仓库默认分支**都会自动测试、构建并部署。其他分支和 PR 只测试与构建，不部署。资源使用相对路径，可部署到仓库子路径，不需要改域名或 base 配置。
-
-首次启用 Pages 需要你在自己的 GitHub 仓库里设置；此项目没有连接远程仓库，尚未执行线上部署。
-
-参考：[GitHub 官方自定义 Pages 工作流说明](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
-
-## 怎么测试
-
-- **图片来源**：多选上传或拖入图片，或填写 HTTP(S) 图片 URL / 本站相对路径。每张不超过 25 MB，一次会话最多保留 60 张；本地文件不发送至服务器，刷新即清除。
-- **展示**：调节宽度（80–280 CSS px）、封面比例、Cover / Contain / Fill、重复份数和预览宽度。桌面、手机按钮只切换容器宽度。重复份数复用相同资源，不代表多次下载。
-- **尺寸与清晰度**：点击封面查看原图尺寸、文件字节和实际 `<img>` 渲染尺寸；根据 `object-fit` 和所选 DPR 判断像素是否够用。DPR 下拉只用于计算，不改变浏览器的实际像素密度。SVG 为矢量，不能通过它判断位图压缩效果。
-- **原图对比**：查看原图，切换适应窗口 / 1:1。1:1 对应 CSS 像素，高分屏仍需结合实际显示检查。不做任何压缩或格式转换。
-- **F12**：右键封面 → 检查；可以直接检查真实 `img` 的 Rendered size、Intrinsic size、宽高、object-fit 和源地址。页面右上角也有操作指南。
-
-## 本地上传与网络测速的区别
-
-本地文件生成 `blob:` URL，只能测浏览器读取和 `decode()` 等待时间。**它没有网络下载，不能代表 CDN、GitHub Pages 或实际玩家的加载速度。** 浏览器也可能已在触发 `load` 前完成部分解码，所以单列的 `decode()` 等待并非独立纯解码 CPU 耗时。
-
-URL 测试使用真实 `Image` 请求，记录设置 `src` 到 `decode()` 完成的耗时，不包含最终绘制。跨域图片通常能显示，但原站防盗链、访问鉴权、HTTP 混合内容或浏览器不支持的格式可能导致失败；只有原站允许时才会暴露详细 Resource Timing。文件体积 / 传输大小拿不到时会显示未知，不把它当成 0。
-
-“添加随机参数”用于尽量获得不同缓存键，不能保证所有 CDN 绕过缓存，也可能破坏签名 URL。需要原样访问时取消勾选。**F12 Network 勾选 Disable cache，设置限速并检查 Timing，才是检查缓存和链路的依据**。不要把 localhost 的时间当作线上速度。
-
-要测自己图片的真实线上下载：
-
-1. 将图片放入 `public/test-images/`，如 `public/test-images/game-a.webp`。
-2. 提交并等待 GitHub 自动部署完成。
-3. 在已部署的网站中输入 `./test-images/game-a.webp`。
-4. F12 → Network → Disable cache → 选择目标限速 → 重新测试。建议冷、热缓存各测 3–5 次，并用真实手机和目标地区网络验证。
-
-提交到 `public/` 的文件会随网站公开发布。网页内临时选取的文件不会写入仓库，也不会持久保存。
-
-## 加载速度参考
-
-以下是测试起点，不是对所有平台的硬标准：
-
-- 对约 150 × 200 CSS px 的封面，可先尝试 30–100 KB 的 WebP / AVIF，像素宽高覆盖目标 DPR；以实际压缩细节和观感为准。
-- 目标网络下，未缓存单张请求到可解码尽量 ≤ 500 ms；500–1000 ms 可优化，超过 1 s 优先排查体积、延迟与缓存。测试台不对本地读取时间给出网络速度评级。
-- 单张表现不能代表整个大厅。还需要检查首屏图片合计体积、并发下载、懒加载、设备解码能力与 CDN 地理位置。
-- 整页加载参考 [Google LCP 指标](https://web.dev/articles/lcp)：75% 访问的 LCP ≤ 2.5 s 为良好。这个指标和单图加载时间不同，本工具没有声称测量整页 LCP。
-- “带宽估算”是 `字节数 × 8 ÷ (Mbps × 1,000,000) × 1000 + 首包延迟`，只是传输下限，不会真的限速，也不计服务端处理、并发争用、丢包、解码与绘制。合计按每个库中原图一次计算，重复展示不重复累加。
-
-## 文件结构
-
-```text
-public/                   网页源码与静态资源
-  app.js                  上传、预览、测量与交互
-  metrics.js              传输估算、DPR 与填充像素判断
-  demo/                   6 张原创 SVG 示例封面
-  test-images/            可自行添加需要线上测速的图片
-scripts/build.mjs         复制静态资源到 dist
-scripts/serve.mjs         本地预览服务器
-scripts/make-demo-art.mjs  重新生成示例封面（一般不需要执行）
-tests/                    Node.js 内置测试，无测试依赖
-.github/workflows/        GitHub Pages 自动测试与部署
+```powershell
+npm run build
+npm start
 ```
+
+`npm start` 在 3001 端口同时提供完整静态网站和 API，可配置 `PORT`、`HOST`。`ALLOWED_ORIGINS` 配置允许的前端来源，逗号分隔。网页展开“可选 Sharp 服务”后可选择服务模式并填写地址；文件会发送至该服务，本地开发地址留空则使用代理。
+
+```powershell
+docker build -t cover-lab .
+docker run --rm -p 3001:3001 cover-lab
+```
+
+API：`POST /api/process`，multipart 字段 `image` 和 JSON 字符串 `options`。返回真实图片二进制，URI 编码的 JSON 报告位于 `X-Image-Report` 响应头。支持 `format`、`mode`、`quality`、可选 `width/height`、`allowReencode`、`flattenAlpha/background`。不持久保存原图，PNG 临时目录在结束后清理，最多同时处理 2 张。
+
+## 验证
+
+`npm test` 使用 Node 内置测试，直接加载与网页相同的 WASM 引擎，也测试 Sharp 和真实 HTTP 上传，不是模拟界面：
+
+- 四种格式真实读写，再由 Sharp 独立解码检查；透明、ICC、EXIF、方向标记和像素哈希。
+- 高位深拒绝、JPEG 无损限制、透明铺底需明确允许、等比缩放基准和原文件直出。
+- ZIP 内容、重名 / 路径处理、校验报告与输出一致；文件夹多批次递归与错误处理。
+
+界面另经浏览器验证实际批量转换、预览、增大提示及 ZIP 下载。部署后检查真实 Pages 子路径的 Worker / WASM 加载。
+
+代码：`public/` 封面页；`client/` React、Worker 与网页引擎；`server/` 可选 Sharp 服务；`shared/` 参数和 ZIP；`tests/` 真实功能测试。
+
+上游：[Sharp](https://sharp.pixelplumbing.com/api-output/)、[ImageMagick WASM](https://github.com/dlemstra/magick-wasm)、[Oxipng WASM](https://github.com/jamsinclair/jSquash/tree/main/packages/oxipng)。

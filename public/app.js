@@ -1,4 +1,5 @@
-import { estimateTransfer, pixelCoverage } from './metrics.js';
+import { pixelCoverage } from './metrics.js';
+import { imagesFromFiles, collectDroppedImages } from './import-images.js';
 
 const $ = (id) => document.getElementById(id);
 const items = [];
@@ -7,10 +8,9 @@ let nextId = 0;
 let generation = 0;
 let toastTimer;
 let zoomed = false;
-const demos = [
-  ['gems', 'Crystal Quest'], ['fortune', 'Golden Fortune'], ['ocean', 'Ocean Secrets'],
-  ['neon', 'Neon Nights'], ['citrus', 'Citrus Club'], ['moon', 'Moonlight Magic'],
-];
+let importing = false;
+const demos = [['gems', 'Crystal Quest']];
+const imageLimit = 500;
 const selected = () => items.find((item) => item.id === selectedId);
 const bytesLabel = (bytes) => bytes == null ? '未知' : bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(2)} MB`;
 const timeLabel = (ms) => ms == null ? '—' : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
@@ -57,41 +57,55 @@ function loadImage(src) {
   });
 }
 
-async function addImage({ src, name, file, demo = false }) {
-  if (items.length >= 60) {
+async function addImage({ src, name, file, demo = false, renderNow = true }) {
+  if (items.length >= imageLimit) {
     if (file) URL.revokeObjectURL(src);
-    throw new Error('最多保留 60 张图片，请先清空图片库');
+    throw new Error(`最多保留 ${imageLimit} 张图片`);
   }
   const currentGeneration = generation;
   try {
     const result = await loadImage(src);
-    if (currentGeneration !== generation || items.length >= 60) {
+    if (currentGeneration !== generation || items.length >= imageLimit) {
       if (file) URL.revokeObjectURL(src);
       return;
     }
+    if (demo && items.some((item) => !item.demo)) return;
     const item = { ...result, id: ++nextId, src, originalSrc: src, name, local: !!file, demo,
       bytes: file ? file.size : result.bytes,
       type: file?.type || (new URL(src, location.href).pathname.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : '线上图片'),
     };
+    if (!demo) {
+      for (let index = items.length - 1; index >= 0; index--) if (items[index].demo) items.splice(index, 1);
+    }
     items.push(item);
     if (selectedId == null || !demo) selectedId = item.id;
-    render();
+    if (renderNow) render();
   } catch (error) {
     if (file) URL.revokeObjectURL(src);
     throw error;
   }
 }
 
-async function addFiles(files) {
+async function addFiles(images) {
+  if (importing) { notify('正在导入，请稍候'); return; }
+  if (!images.length) { notify('未找到支持的图片', true); return; }
+  importing = true;
   const batch = generation;
-  for (const file of files) {
-    if (batch !== generation) break;
-    if (!file.type.startsWith('image/') && !/\.(png|jpe?g|webp|avif|gif|svg|bmp|ico)$/i.test(file.name)) {
-      notify(`${file.name}：请选择图片文件`, true); continue;
+  let imported = 0, skipped = 0;
+  $('import-status').hidden = false;
+  try {
+    for (const { file, path } of images) {
+      if (batch !== generation) break;
+      if (items.length >= imageLimit) { notify(`已达 ${imageLimit} 张上限，剩余图片未导入`, true); break; }
+      if (file.size > 25 * 1024 * 1024) { skipped++; continue; }
+      try { await addImage({ src: URL.createObjectURL(file), name: path, file, renderNow: false }); imported++; }
+      catch { skipped++; }
+      text('import-status', `导入 ${imported + skipped} / ${images.length}`);
+      if ((imported + skipped) % 12 === 0) render();
     }
-    if (file.size > 25 * 1024 * 1024) { notify(`${file.name}：单张图片需小于 25 MB`, true); continue; }
-    try { await addImage({ src: URL.createObjectURL(file), name: file.name, file }); }
-    catch (error) { notify(`${file.name}：${error.message}`, true); }
+    if (batch === generation && skipped) notify(`已导入 ${imported} 张，跳过 ${skipped} 张（超过 25 MB 或无法解码）`, true);
+  } finally {
+    importing = false; $('import-status').hidden = true; render();
   }
 }
 
@@ -99,8 +113,9 @@ function render() {
   $('file-list').replaceChildren();
   $('game-grid').replaceChildren();
   text('file-count', `${items.length} 张`);
+  $('demo-button').hidden = items.some((item) => !item.demo);
   const repeat = Number($('repeat').value);
-  text('preview-count', `${items.length * repeat} GAMES`);
+  text('preview-count', `${items.length * repeat} 张`);
   $('empty-state').hidden = items.length > 0;
   for (const item of items) {
     const row = document.createElement('button');
@@ -123,7 +138,7 @@ function render() {
       image.dataset.originalWidth = item.width; image.dataset.originalHeight = item.height;
       image.addEventListener('error', () => notify(`${item.name}：预览加载失败，链接可能已失效`, true), { once: true });
       button.append(image);
-      const badge = document.createElement('span'); badge.className = 'selected-label'; badge.textContent = 'SELECTED'; badge.hidden = item.id !== selectedId; button.append(badge);
+      const badge = document.createElement('span'); badge.className = 'selected-label'; badge.textContent = '已选'; badge.hidden = item.id !== selectedId; button.append(badge);
       button.addEventListener('click', () => selectItem(item.id));
       const info = document.createElement('div'); info.className = 'card-info';
       const dimensions = document.createElement('span'); dimensions.className = 'card-dimensions';
@@ -163,47 +178,34 @@ function updateInspection() {
     text('image-type', '等待图片'); text('target-size', '含 DPR 的所需像素：—'); text('file-source', '—');
     text('sharpness-note', '仅评价像素是否足够'); $('sharpness').className = '';
     text('dpr-label', 'DPR —'); text('measurement-kind', '选择图片');
-    text('load-note', 'URL 图片可测请求到解码完成的耗时。');
-    text('network-detail', '精确网络瀑布、缓存和传输体积请查看 F12 Network。');
-    text('inspection-note', '像素充足不代表原图没有压缩模糊，请结合原图与实际观感判断。');
-    updateEstimate(); return;
+    text('load-note', '选择图片后测量');
+    text('network-detail', '');
+    text('inspection-note', '');
+    return;
   }
   const image = document.querySelector(`.game-card[data-image-id="${item.id}"] .cover-image`);
+  if (!image) return; // 批量导入时，所选图片可能尚未加入这一批 DOM。
   const rect = image.getBoundingClientRect();
   const dpr = $('density').value === 'auto' ? window.devicePixelRatio || 1 : Number($('density').value);
   const coverage = pixelCoverage(item.width, item.height, rect.width, rect.height, dpr, $('fit').value);
   const vector = item.type === 'image/svg+xml';
   text('selected-name', item.name);
   text('natural-size', `${item.width} × ${item.height}`);
-  text('image-type', `${item.type}${item.demo ? ' · 示例矢量图' : ''}`);
+  text('image-type', item.demo ? 'SVG 示例' : item.type);
   text('render-size', `${Math.round(rect.width * 10) / 10} × ${Math.round(rect.height * 10) / 10}`);
   text('target-size', `像素盒子：${coverage.targetWidth} × ${coverage.targetHeight} px`);
   text('file-size', bytesLabel(item.bytes));
-  text('file-source', item.local ? '本地原始文件 · 不压缩' : item.bytes == null ? '跨域或缓存未暴露大小，以 Network 为准' : 'Resource Timing 记录的响应体大小');
+  text('file-source', item.local ? '原文件' : item.bytes == null ? '以 Network 为准' : '响应体大小');
   text('dpr-label', `DPR ${Math.round(dpr * 100) / 100}`);
   text('sharpness', vector ? '矢量图' : coverage.ratio >= 1 ? '像素充足' : '可能模糊');
   $('sharpness').className = vector || coverage.ratio >= 1 ? 'good' : 'warn';
-  text('sharpness-note', vector ? '矢量可缩放；内嵌位图需单独检查' : `可用像素 / 所需像素：${coverage.ratio.toFixed(2)}×`);
-  text('inspection-note', $('fit').value === 'fill' ? '当前为拉伸显示：比例不匹配时会变形。像素充足也需要检查原图压缩质量。' : vector ? '这是 SVG 示例，适合测试布局；请上传你的实际位图检查清晰度、体积和解码表现。' : `当前为${$('fit').value === 'cover' ? '填满裁切' : '完整显示'}。像素检查已考虑填充方式；充足不代表没有压缩模糊，请结合肉眼判断。`);
+  text('sharpness-note', vector ? '可缩放' : `像素余量 ${coverage.ratio.toFixed(2)}×`);
+  text('inspection-note', $('fit').value === 'fill' ? '拉伸模式可能使图片变形。' : vector ? 'SVG 示例仅用于看布局，请导入实际图片。' : '像素充足仍需检查压缩模糊。');
   text('measurement-kind', item.local ? '本地读取 + 解码' : 'URL 请求 + 解码');
   text('load-time', item.testing ? '测试中…' : timeLabel(item.loadMs));
-  text('decode-time', item.testing ? '' : `其中 decode() 等待 ${timeLabel(item.decodeMs)}`);
-  text('load-note', item.local ? 'blob: 本地图片，没有网络下载。此时间不能用来评价 CDN 或网页下载速度。' : '从设置图片 src 到 decode() 完成，包含可能的缓存命中；不包含最终绘制。');
-  text('network-detail', item.local ? '重复封面复用同一原图，不会产生多次独立下载。' : item.transferBytes ? `浏览器记录传输 ${bytesLabel(item.transferBytes)}（含协议开销）。以 F12 Network 的 Timing 为准。` : '缓存状态或跨域详细计时不可确认；请查看 F12 Network。');
-  updateEstimate();
-}
-
-function updateEstimate() {
-  const mbps = Number($('bandwidth').value), latency = Number($('latency').value);
-  if (!$('bandwidth').value || !$('latency').value || !Number.isFinite(mbps) || !Number.isFinite(latency) || mbps < .01 || latency < 0) {
-    text('estimate-time', '—'); text('batch-estimate', '请输入有效带宽（至少 0.01 Mbps）与非负延迟。'); return;
-  }
-  text('estimate-time', timeLabel(estimateTransfer(selected()?.bytes, mbps, latency)));
-  if (!items.length || items.some((item) => item.bytes == null)) {
-    text('batch-estimate', '当前预览图片合计：体积未知或没有图片'); return;
-  }
-  const total = items.reduce((sum, item) => sum + item.bytes, 0);
-  text('batch-estimate', `${items.length} 张原图共 ${bytesLabel(total)} ≈ ${timeLabel(estimateTransfer(total, mbps, latency))}（共享带宽下限）`);
+  text('decode-time', item.testing ? '' : `decode() 等待 ${timeLabel(item.decodeMs)}`);
+  text('load-note', item.local ? '本地读取，不代表网络下载速度。' : '请求至解码完成，含可能的缓存命中，不含绘制。');
+  text('network-detail', item.local ? '' : item.transferBytes ? `传输 ${bytesLabel(item.transferBytes)} · 详情见 Network` : '缓存与跨域计时以 Network 为准');
 }
 
 function applySettings() {
@@ -228,10 +230,17 @@ async function loadDemos() {
   } finally { $('demo-button').disabled = false; }
 }
 
-$('file-input').addEventListener('change', (event) => { addFiles([...event.target.files]); event.target.value = ''; });
+$('file-input').addEventListener('change', (event) => { addFiles(imagesFromFiles(event.target.files)); event.target.value = ''; });
+$('folder-input').addEventListener('change', (event) => { addFiles(imagesFromFiles(event.target.files)); event.target.value = ''; });
 for (const event of ['dragenter', 'dragover']) $('drop-zone').addEventListener(event, (e) => { e.preventDefault(); $('drop-zone').classList.add('drag-over'); });
 for (const event of ['dragleave', 'drop']) $('drop-zone').addEventListener(event, (e) => { e.preventDefault(); $('drop-zone').classList.remove('drag-over'); });
-$('drop-zone').addEventListener('drop', (event) => addFiles([...event.dataTransfer.files]));
+$('drop-zone').addEventListener('drop', async (event) => {
+  const batch = generation;
+  try {
+    const images = await collectDroppedImages(event.dataTransfer);
+    if (batch === generation) await addFiles(images);
+  } catch { notify('文件夹读取失败，请使用“选择文件夹”', true); }
+});
 // 防止把图片拖到上传区之外时浏览器直接打开文件、丢失当前测试。
 window.addEventListener('dragover', (event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
 window.addEventListener('drop', (event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
@@ -256,7 +265,6 @@ $('clear-button').addEventListener('click', () => {
 $('demo-button').addEventListener('click', loadDemos);
 for (const id of ['card-width', 'aspect', 'fit', 'density', 'show-info']) $(id).addEventListener('input', applySettings);
 $('repeat').addEventListener('change', render);
-for (const id of ['bandwidth', 'latency']) $(id).addEventListener('input', updateEstimate);
 function setViewport(mobile) {
   $('lobby').classList.toggle('mobile', mobile);
   $('desktop-button').setAttribute('aria-pressed', String(!mobile));
