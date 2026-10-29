@@ -1,0 +1,14 @@
+{
+  "name": "cover-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "游戏封面尺寸、清晰度和加载测试台",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "test": "node --test",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/serve.mjs dist"
+  },
+  "engines": { "node": ">=22" }
+}

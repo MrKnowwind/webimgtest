@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#10131b">
+  <meta name="description" content="上传游戏封面，检查真实显示尺寸、像素密度、裁切和图片加载耗时。">
+  <title>Cover Lab · 游戏封面测试台</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="./" aria-label="Cover Lab 首页"><span class="brand-icon">C<span>▱</span></span><strong>COVER<span>LAB</span></strong><span class="brand-divider"></span><span class="brand-caption">游戏封面测试台</span></a>
+    <div class="header-actions"><span class="local-tag"><i></i> 本地图片不上传服务器</span><button class="button quiet" id="guide-button"><span aria-hidden="true">⌘</span> F12 检查指南</button></div>
+  </header>
+
+  <main>
+    <div class="page-heading"><div><div class="eyebrow">YOUR COVER, IN CONTEXT</div><h1>好封面，放进大厅看一看<span>。</span></h1><p>上传图片，调整展示，检查像素与速度。让每一张封面恰到好处。</p></div><span class="version-tag">IMAGE TEST BENCH <b>01</b></span></div>
+    <div class="workspace">
+      <aside class="sidebar">
+        <section class="panel source-panel">
+          <div class="section-title"><h2><span class="step">01</span> 图片来源</h2><span class="subtle" id="file-count">0 张</span></div>
+          <label class="drop-zone" id="drop-zone"><input id="file-input" type="file" accept="image/*" multiple><span class="upload-icon" aria-hidden="true">↥</span><strong>拖入图片，或点击上传</strong><span>PNG / JPG / WebP / AVIF / GIF / SVG</span><span>原图展示 · 不压缩 · 可多选</span></label>
+          <div class="or-divider"><span>或使用线上图片</span></div>
+          <form id="url-form"><label class="sr-only" for="image-url">图片 URL 或本站相对路径</label><div class="url-input"><input type="text" id="image-url" placeholder="https://… 或 ./test-images/…" required><button type="submit" title="添加图片" aria-label="添加图片">↗</button></div></form>
+          <p class="source-note">本地文件测显示；线上 URL 测真实请求。<br>单张 ≤ 25 MB · 图片库最多 60 张</p>
+          <div class="library-heading"><span>图片库</span><div><button class="text-button" id="demo-button">载入示例</button><button class="text-button" id="clear-button">清空</button></div></div>
+          <div class="file-list" id="file-list" aria-label="图片列表"></div>
+          <p class="subtle library-note">点击图片查看详情 · 关闭页面后清除</p>
+        </section>
+        <section class="panel settings-panel">
+          <div class="section-title"><h2><span class="step">02</span> 展示设置</h2><button class="text-button" id="reset-button">重置</button></div>
+          <label class="control-label" for="card-width">卡片宽度 <output id="width-value">148 px</output></label><input type="range" id="card-width" min="80" max="280" step="1" value="148">
+          <label class="control-label" for="aspect">封面比例</label><select id="aspect"><option value="3 / 4">3 : 4　经典竖版</option><option value="2 / 3">2 : 3　长竖版</option><option value="1 / 1">1 : 1　方形</option><option value="4 / 3">4 : 3　横版</option><option value="16 / 9">16 : 9　宽屏</option></select>
+          <label class="control-label" for="fit">图片填充</label><select id="fit"><option value="cover">Cover · 填满并裁切</option><option value="contain">Contain · 完整显示</option><option value="fill">Fill · 拉伸显示</option></select>
+          <div class="two-controls"><div><label class="control-label" for="repeat">重复份数</label><select id="repeat"><option value="1">1 份</option><option value="2">2 份</option><option value="4">4 份</option></select></div><div><label class="control-label" for="density">检测 DPR</label><select id="density"><option value="auto">当前屏幕</option><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option></select></div></div>
+          <label class="check-label"><input type="checkbox" id="show-info" checked> 显示卡片尺寸标注</label>
+        </section>
+      </aside>
+
+      <div class="main-column">
+        <section class="panel preview-panel">
+          <div class="preview-toolbar"><div class="section-title"><h2><span class="step">03</span> 大厅预览</h2><span class="live-badge"><i></i> LIVE</span></div><div class="segmented" aria-label="预览宽度"><button id="desktop-button" aria-pressed="true">▣ <span>桌面</span></button><button id="mobile-button" aria-pressed="false">▯ <span>手机</span></button></div></div>
+          <div class="preview-outer"><div class="lobby" id="lobby">
+            <div class="lobby-nav"><strong><span class="tiny-logo">◈</span> PLAYROOM</strong><span class="lobby-nav-label">GAMES <b>PREVIEW</b></span><span class="avatar">C</span></div>
+            <div class="lobby-banner"><div><span class="banner-kicker">THE NEXT FAVORITE</span><h2>小小封面，大有看头。</h2><p>你的游戏大厅，现在开始预演。</p><span class="banner-pill">COVER PREVIEW <span>↗</span></span></div><div class="banner-art" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="gem">◆</span><span class="spark spark-one">✦</span><span class="spark spark-two">✧</span><span class="small-gem">◆</span></div></div>
+            <div class="lobby-category"><div><span class="category-icon">✦</span><h3>热门精选 <span>Popular games</span></h3></div><span id="preview-count">0 GAMES</span></div>
+            <div class="game-grid" id="game-grid"></div>
+            <div class="empty-state" id="empty-state" hidden><span>▧</span><h3>把第一张封面放进来</h3><p>拖入图片，看看它在大厅里的样子。</p></div>
+            <div class="lobby-footer"><span><i></i> 测试预览 · 仅展示封面</span><span id="viewport-size"></span></div>
+          </div></div>
+          <div class="preview-tip"><span>⌖</span><span>点击封面查看详情；右键 → 检查，可直接选中真实的 <code>&lt;img&gt;</code> 元素。</span></div>
+        </section>
+
+        <section class="panel inspector-panel" id="inspector">
+          <div class="section-title inspector-title"><div><h2><span class="step">04</span> 图片检查</h2><p id="selected-name">选择一张封面</p></div><button class="button quiet" id="original-button" disabled>查看原图 ↗</button></div>
+          <div class="metric-grid"><div class="metric"><span>原图尺寸</span><strong id="natural-size">—</strong><small id="image-type">等待图片</small></div><div class="metric"><span>实际显示尺寸 <em>CSS</em></span><strong id="render-size">—</strong><small id="target-size">含 DPR 的所需像素：—</small></div><div class="metric"><span>原始文件体积</span><strong id="file-size">—</strong><small id="file-source">—</small></div><div class="metric"><span>像素充足度 <em id="dpr-label">DPR —</em></span><strong id="sharpness">—</strong><small id="sharpness-note">仅评价像素是否足够</small></div></div>
+          <div class="inspection-note" id="inspection-note">像素充足不代表原图没有压缩模糊，请结合原图与实际观感判断。</div>
+        </section>
+
+        <section class="panel speed-panel">
+          <div class="section-title"><h2><span class="step">05</span> 加载速度</h2><span class="subtle">先看体积，再看链路</span></div>
+          <div class="speed-columns"><div class="speed-test"><div class="speed-heading"><h3>实际加载</h3><span id="measurement-kind" class="mini-tag">选择图片</span></div><div class="speed-result"><strong id="load-time">—</strong><span id="decode-time"></span></div><p id="load-note">URL 图片可测请求到解码完成的耗时。</p><label class="check-label"><input type="checkbox" id="cache-bust" checked> 重测时添加随机参数（可能影响签名 URL）</label><button class="button secondary" id="retest-button" disabled>↻ 重新测试所选图片</button><p class="subtle" id="network-detail">精确网络瀑布、缓存和传输体积请查看 F12 Network。</p></div>
+          <div class="speed-estimate"><div class="speed-heading"><h3>带宽估算</h3><span class="mini-tag amber">非实测</span></div><div class="two-controls"><div><label class="control-label" for="bandwidth">下行 Mbps</label><input type="number" id="bandwidth" min="0.01" max="10000" step="any" value="10"></div><div><label class="control-label" for="latency">首包延迟 ms</label><input type="number" id="latency" min="0" max="60000" value="100"></div></div><div class="estimate-result"><strong id="estimate-time">—</strong><span>单张传输下限</span></div><p id="batch-estimate">当前预览图片合计：—</p><p class="subtle">文件字节 × 8 ÷ 带宽 + 首包延迟。未计并发、服务端处理、解码及丢包；修改此处不会限制网络。</p></div></div>
+          <details class="speed-guide"><summary>多快才算够用？<span>查看测试建议 ↗</span></summary><div><p><b>封面经验目标：</b>在你的目标设备和网络下，未缓存单张从请求到可显示尽量 ≤ 500 ms；500–1000 ms 可继续优化，超过 1 s 优先排查。这是本工具的经验建议，不是通用标准。</p><p><b>体积起点：</b>约 150 × 200 CSS px 的封面可先尝试 30–100 KB 的 WebP / AVIF，并准备与目标 DPR 匹配的像素；细节丰富的封面仍要以肉眼对比为准。多张同时加载时还需要控制首屏总量。</p><p><b>整页体验：</b><a href="https://web.dev/articles/lcp" target="_blank" rel="noopener noreferrer">Google 的 LCP 良好标准是 ≤ 2.5 s（75% 访问）</a>，它衡量整页最大内容绘制，与这里的单图计时不同。</p><p><b>可靠测试：</b>F12 → Network → Disable cache → 选择 Fast 4G / Slow 4G 等目标网络 → 重测 URL 图片。冷缓存和热缓存各测 3–5 次，并在真实手机上复核。手机预览只改布局，不模拟 CPU 或设备 DPR。</p></div></details>
+        </section>
+      </div>
+    </div>
+    <footer class="app-footer"><span>COVER LAB <i>/</i> 把每一个像素用在恰好的地方。</span><span>临时预览 · 无账号 · 无服务端存储</span></footer>
+  </main>
+  <div class="toast" role="status" id="toast" hidden></div>
+  <dialog id="guide-dialog"><div class="dialog-heading"><h2>用 F12，看清每一个细节</h2><button class="icon-button" data-close="guide-dialog" aria-label="关闭指南">×</button></div><ol><li><b>看实际尺寸</b><p>右键大厅封面 → 检查。鼠标悬停 <code>&lt;img&gt;</code>，查看 Rendered size、Intrinsic size 和文件地址。Elements 的 Computed 可检查宽高与 object-fit。</p></li><li><b>测真实加载</b><p>添加线上图片 URL（也支持本站相对路径），在 Network 勾选 Disable cache、选好限速，点击“重新测试”。使用 Img 过滤请求，查看 Size、Time 和 Timing。自动计时包含加载及解码，缓存状态以 Network 为准。</p></li><li><b>测试自己的图片网络下载</b><p>把图片提交到仓库 <code>public/test-images/</code> 并等待自动部署，再在 URL 输入框填写 <code>./test-images/文件名.webp</code>。临时上传生成的是 blob: 地址，没有服务器下载过程。</p></li><li><b>判断清晰度</b><p>在原图查看器中切换 1:1 / 适应，结合大厅实际效果比较。DPR 检测项只是计算要求；真实设备模拟请用 F12 设备工具栏并设置 DPR。</p></li></ol><p class="dialog-footnote">本工具不自动压缩、不转换格式、不修改原图。关闭或刷新页面会清除本次临时图片。</p></dialog>
+  <dialog id="original-dialog"><div class="dialog-heading"><h2 id="original-name">原图</h2><div><button class="button quiet" id="zoom-button">切换 1:1</button><button class="icon-button" data-close="original-dialog" aria-label="关闭原图">×</button></div></div><div class="original-viewport" id="original-viewport"><img id="original-image" alt="原图预览"></div><p class="dialog-footnote">1:1 为 1 个图片像素对应 1 个 CSS 像素；高 DPR 屏幕请结合实际显示检查。</p></dialog>
+</body>
+</html>
